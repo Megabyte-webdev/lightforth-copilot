@@ -1,0 +1,66 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "lightforth-copilot",
+  "version": "0.1.0",
+  "identifier": "com.copilot-lightforth",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Lightforth Dashboard",
+        "width": 1000,
+        "height": 700,
+        "decorations": false,
+        "center": true,
+        "backgroundColor": "#00000000",
+        "shadow": false
+      },
+      {
+        "label": "widget",
+        "width": 500,
+        "height": 120,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "backgroundColor": "#00000000",
+        "shadow": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJCRDE1MThEOTVDOTEyNzkKUldSNUVzbVZqVkhSS3p1YkYwNm0yZzdTRmZwTkxkbDFYMUp0b25XV0w2VFBVOTc5U2d1MllhSWIK",
+      "endpoints": [
+        "https://raw.githubusercontent.com/Megabyte-webdev/lightforth-copilot/main/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      },
+      "dialog": false,
+      "active": true
+    }
+  }
+}

@@ -1,0 +1,120 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: "LightForth Copilot"
+
+jobs:
+  release:
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            arch: aarch64
+            tauri_args: "--target aarch64-apple-darwin"
+          - platform: macos-latest
+            arch: x86_64
+            tauri_args: "--target x86_64-apple-darwin"
+          - platform: ubuntu-latest
+            arch: x86_64
+            tauri_args: ""
+          - platform: windows-latest
+            arch: x86_64
+            tauri_args: ""
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      # - name: Install Linux dependencies
+      #   if: runner.os == 'Linux'
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt-get install -y \
+      #       libwebkit2gtk-4.1-dev \
+      #       libgtk-3-dev \
+      #       libglib2.0-dev \
+      #       libgdk-pixbuf2.0-dev \
+      #       libpango1.0-dev \
+      #       libcairo2-dev \
+      #       pkg-config \
+      #       libayatana-appindicator3-dev \
+      #       librsvg2-dev \
+      #       patchelf
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      # Set version from tag (CRITICAL FIX)
+      - name: Sync version with Git tag
+        shell: bash
+        run: |
+          TAG_VERSION=${GITHUB_REF_NAME#v}
+          echo "Setting version to $TAG_VERSION"
+
+          # update Node package version
+          jq ".version = \"$TAG_VERSION\"" package.json > package.tmp.json && mv package.tmp.json package.json
+
+          # update Tauri config top-level version only (DO NOT use .package)
+          jq ".version = \"$TAG_VERSION\"" src-tauri/tauri.conf.json > src-tauri/tauri.tmp.json && mv src-tauri/tauri.tmp.json src-tauri/tauri.conf.json
+
+      # Decode signing key
+      - name: Decode Tauri signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          TMP_KEY="$RUNNER_TEMP/tauri.key"
+
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            powershell -NoProfile -Command "[IO.File]::WriteAllBytes('${TMP_KEY}', [Convert]::FromBase64String('${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}'))"
+          else
+            echo '${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}' | base64 --decode > "$TMP_KEY"
+            chmod 600 "$TMP_KEY"
+          fi
+
+          echo "TAURI_SIGNING_PRIVATE_KEY=$TMP_KEY" >> $GITHUB_ENV
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> $GITHUB_ENV
+
+      # Build + Publish
+      - name: Build and publish Tauri app
+        uses: tauri-apps/tauri-action@v0
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "${{ env.APP_NAME }} ${{ github.ref_name }}"
+          releaseBody: |
+            Release ${{ github.ref_name }}
+          args: ${{ matrix.tauri_args }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
