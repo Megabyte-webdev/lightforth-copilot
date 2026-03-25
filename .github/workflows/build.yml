@@ -25,9 +25,6 @@ jobs:
           - platform: macos-latest
             arch: x86_64
             tauri_args: "--target x86_64-apple-darwin"
-          - platform: ubuntu-latest
-            arch: x86_64
-            tauri_args: ""
           - platform: windows-latest
             arch: x86_64
             tauri_args: ""
