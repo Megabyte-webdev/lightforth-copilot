@@ -19,6 +19,22 @@
         "decorations": false,
         "center": true,
         "backgroundColor": "#00000000",
+        "shadow": false,
+        "visible": false
+      },
+      {
+        "label": "meetingWidget",
+        "title": "Meeting Detected",
+        "width": 300,
+        "height": 200,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "resizable": false,
+        "fullscreen": false,
+        "backgroundColor": "#00000000",
         "shadow": false
       },
       {

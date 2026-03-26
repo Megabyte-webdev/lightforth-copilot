@@ -3,10 +3,13 @@
 body {
   width: 100vw;
   height: 100vh;
-  background-color: transparent;
+  background-color: transparent !important;
   overflow: hidden;
 }
 
+#root {
+  background: transparent !important;
+}
 @keyframes border-dance {
   0% {
     stroke-dashoffset: 0;

@@ -8,7 +8,6 @@ pub async fn transcribe_audio(
 ) -> Result<String, String> {
     dotenvy::dotenv().ok();
     let api_key = env::var("GROQ_API_KEY").map_err(|_| "API Key missing")?;
-    println!(">>> [API Key] {:?}", api_key);
 
     // Downsample logic (e.g., 48k to 16k is a factor of 3)
     let factor = (original_sample_rate / 16000).max(1) as usize;

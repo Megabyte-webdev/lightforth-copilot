@@ -10,14 +10,30 @@ use tauri::{AppHandle, Emitter};
 pub struct AudioManager {
     stream: Option<cpal::Stream>,
     is_running: Arc<AtomicBool>,
+    pub current_rms: Arc<Mutex<f32>>,
 }
+
+pub type SharedAudio = Arc<Mutex<AudioManager>>;
 
 impl AudioManager {
     pub fn new() -> Self {
         Self {
             stream: None,
             is_running: Arc::new(AtomicBool::new(false)),
+            current_rms: Arc::new(Mutex::new(0.0)),
         }
+    }
+
+    pub fn is_stream_active(&self) -> bool {
+        self.is_running.load(Ordering::Relaxed)
+    }
+
+    // Add this public method for the MeetingDetector to call
+    pub fn is_audio_active(&self) -> bool {
+        let rms = self.current_rms.lock().unwrap_or_else(|e| e.into_inner());
+        let active = *rms > 0.0005; // even more sensitive
+        println!(">>> [AUDIO] Current RMS: {}, Active? {}", *rms, active);
+        active
     }
 
     pub fn start(&mut self, app_handle: AppHandle) -> Result<(), String> {
@@ -44,17 +60,32 @@ impl AudioManager {
         let buffer = Arc::new(Mutex::new(Vec::<f32>::new()));
         let is_running = self.is_running.clone();
         is_running.store(true, Ordering::Relaxed);
-
+        let current_rms = self.current_rms.clone();
         let stream = match sample_format {
-            SampleFormat::F32 => {
-                build_stream::<f32>(&device, &config, buffer, app_handle, is_running)?
-            }
-            SampleFormat::I16 => {
-                build_stream::<i16>(&device, &config, buffer, app_handle, is_running)?
-            }
-            SampleFormat::U16 => {
-                build_stream::<u16>(&device, &config, buffer, app_handle, is_running)?
-            }
+            SampleFormat::F32 => build_stream::<f32>(
+                &device,
+                &config,
+                buffer,
+                app_handle,
+                is_running,
+                current_rms,
+            )?,
+            SampleFormat::I16 => build_stream::<i16>(
+                &device,
+                &config,
+                buffer,
+                app_handle,
+                is_running,
+                current_rms,
+            )?,
+            SampleFormat::U16 => build_stream::<u16>(
+                &device,
+                &config,
+                buffer,
+                app_handle,
+                is_running,
+                current_rms,
+            )?,
             _ => return Err(format!("Unsupported format: {:?}", sample_format)),
         };
 
@@ -76,6 +107,7 @@ fn build_stream<T>(
     buffer: Arc<Mutex<Vec<f32>>>,
     app_handle: AppHandle,
     is_running: Arc<AtomicBool>,
+    current_rms: Arc<Mutex<f32>>,
 ) -> Result<cpal::Stream, String>
 where
     T: Sample + SizedSample + cpal::FromSample<T>,
@@ -88,6 +120,19 @@ where
         .build_input_stream(
             config,
             move |data: &[T], _| {
+                let sum_sq: f32 = data
+                    .iter()
+                    .map(|s| {
+                        let f = s.to_sample::<f32>();
+                        f * f
+                    })
+                    .sum();
+                let rms = (sum_sq / data.len() as f32).sqrt();
+                // Update the shared volume level
+                if let Ok(mut val) = current_rms.lock() {
+                    *val = rms;
+                }
+
                 if !is_running.load(Ordering::Relaxed) {
                     return;
                 }
