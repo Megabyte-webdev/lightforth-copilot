@@ -3,15 +3,13 @@ import { listen } from "@tauri-apps/api/event";
 import { motion, AnimatePresence } from "framer-motion";
 import { Zap, Mic, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 export default function MeetingWidget() {
   const [platform, setPlatform] = useState<string>("Detecting...");
   const [visible, setVisible] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, _setExpanded] = useState(false);
 
   useEffect(() => {
-    const appWindow = getCurrentWebviewWindow();
     let unlisten: any;
 
     const init = async () => {
