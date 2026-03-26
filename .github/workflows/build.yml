@@ -19,15 +19,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - platform: windows-latest
+            arch: x86_64
+            tauri_args: ""
           - platform: macos-latest
             arch: aarch64
             tauri_args: "--target aarch64-apple-darwin"
           - platform: macos-latest
             arch: x86_64
             tauri_args: "--target x86_64-apple-darwin"
-          - platform: windows-latest
-            arch: x86_64
-            tauri_args: ""
 
     steps:
       - name: Checkout repository
