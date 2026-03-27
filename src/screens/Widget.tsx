@@ -34,23 +34,22 @@ export default function Widget() {
   const handleSendMessage = async () => {
     if (!input.trim()) return;
 
-    // 1. Update global UI state
     state.aiStatus = "processing";
     const userQuery = input;
     setInput("");
 
     try {
-      // 2. Call Rust Backend
-      // Passing both the text and whether 'Use Screen' (Smart Mode) is active
-      const response = await invoke("process_command", {
-        message: userQuery,
-        useScreen: snap.isSmartMode, // Assuming you have this in your Valtio state
+      // Call your new Rust command
+      const response = await invoke("kalosm_ask_ai", {
+        prompt: userQuery,
       });
 
       state.aiResponse = response as string;
     } catch (error) {
-      state.aiResponse = "ERROR: UPLINK FAILED.";
       console.error(error);
+
+      state.aiResponse =
+        typeof error === "string" ? error : "SYSTEM ERROR: CHECK CONSOLE";
     } finally {
       state.aiStatus = "idle";
     }

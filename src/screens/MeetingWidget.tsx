@@ -1,28 +1,40 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, Mic, X } from "lucide-react";
+import { X, Sparkles, Activity, Command } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 
 export default function MeetingWidget() {
   const [platform, setPlatform] = useState<string>("Detecting...");
   const [visible, setVisible] = useState(false);
-  const [expanded, _setExpanded] = useState(false);
 
   useEffect(() => {
-    let unlisten: any;
+    let unlistenDetect: any;
+    let unlistenEnd: any;
 
     const init = async () => {
-      await listen<string>("meeting-detected", (event) => {
-        console.log("RECEIVED:", event.payload);
-        setPlatform(event.payload || "Meeting");
+      unlistenDetect = await listen<any>("meeting-detected", (event) => {
+        const payload = event.payload;
+        const keys = Object.keys(payload);
+        const rawTitle = payload[keys[0]];
+        const cleanTitle = rawTitle
+          .replace(/ - Google Chrome$/i, "")
+          .replace(/ - Microsoft Edge$/i, "")
+          .split(" - ")[0];
+
+        setPlatform(cleanTitle);
         setVisible(true);
+      });
+
+      unlistenEnd = await listen("meeting-ended", () => {
+        setVisible(false);
       });
     };
 
     init();
     return () => {
-      if (unlisten) unlisten();
+      if (unlistenDetect) unlistenDetect();
+      if (unlistenEnd) unlistenEnd();
     };
   }, []);
 
@@ -30,57 +42,90 @@ export default function MeetingWidget() {
     setVisible(false);
     await invoke("dismiss_meeting");
   };
+
   const startAssistant = async () => {
     await invoke("start_session");
     closeWidget();
   };
+
   return (
-    /* This outer div ensures the React component actually occupies the window space */
-    <div className="w-screen h-screen overflow-hidden bg-transparent flex items-end justify-right p-4">
+    <div className="w-full h-full flex items-center justify-center bg-transparent select-none font-sans overflow-hidden">
       <AnimatePresence>
         {visible && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full h-full p-3 text-white"
+            initial={{ y: 40, opacity: 0, scale: 0.9 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 20, opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            className="relative w-full group"
           >
-            <div className="backdrop-blur-2xl bg-[#0b0f19]/90 border border-white/10 rounded-2xl shadow-2xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-[10px] text-white/40 tracking-widest uppercase">
-                  Tactical Overlay
+            {/* Main Container */}
+            <div className="relative bg-[#0a0a0b]/90 backdrop-blur-2xl border border-white/10 rounded-[22px] shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden">
+              {/* Header Bar */}
+              <div className="flex items-center justify-between px-4 py-2 bg-white/[0.02] border-b border-white/[0.05]">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
+                  <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">
+                    Lightforth Copilot
+                  </span>
                 </div>
-                <button onClick={closeWidget} className="text-white/40">
-                  <X size={14} />
+                <button
+                  onClick={closeWidget}
+                  className="p-1 hover:bg-white/10 rounded-md transition-colors text-white/20 hover:text-red-500"
+                >
+                  <X size={12} />
                 </button>
               </div>
 
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                  <Zap className="text-blue-400" size={18} />
-                </div>
-                <div>
-                  <div className="text-sm font-bold capitalize">
-                    {platform?.split(" ")[0]}
+              {/* Body */}
+              <div className="p-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="relative flex-shrink-0">
+                    <div className="w-11 h-11 rounded-2xl bg-[#161618] border border-white/5 flex items-center justify-center shadow-inner group-hover:border-blue-500/30 transition-colors">
+                      <Activity size={20} className="text-blue-400" />
+                    </div>
+                    <motion.div
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0a0a0b]"
+                    />
                   </div>
-                  <div className="text-[11px] text-green-400 animate-pulse">
-                    Live Meeting Detected
-                  </div>
-                </div>
-              </div>
 
-              {!expanded ? (
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-medium text-white/40 leading-none">
+                      Meeting Detected
+                    </p>
+                    <h3 className="text-lg font-semibold text-white truncate tracking-tight">
+                      {platform}
+                    </h3>
+                  </div>
+                </div>
+
+                {/* The "Action Bar" Button */}
                 <button
                   onClick={startAssistant}
-                  className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-all"
+                  className="relative w-full group/btn flex items-center justify-between px-4 py-2.5 bg-white rounded-xl transition-all duration-300 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] active:scale-[0.97]"
                 >
-                  Start AI Assistant
+                  <div className="flex items-center gap-2">
+                    <Sparkles
+                      size={14}
+                      className="text-black transition-transform group-hover/btn:rotate-12"
+                    />
+                    <span className="text-[11px] font-bold text-black uppercase tracking-wide">
+                      Start Copilot
+                    </span>
+                  </div>
+
+                  {/* Subtle Keyboard Shortcut Hint */}
+                  <div className="flex items-center gap-0.5 opacity-30 group-hover/btn:opacity-60 transition-opacity">
+                    <Command size={10} className="text-black" />
+                    <span className="text-[9px] font-bold text-black">S</span>
+                  </div>
                 </button>
-              ) : (
-                <div className="flex items-center gap-2 text-red-400 text-xs">
-                  <Mic size={14} className="animate-bounce" /> Listening for
-                  insights...
-                </div>
-              )}
+              </div>
+
+              {/* Decorative Bottom Edge */}
+              <div className="h-1 w-full bg-gradient-to-r from-transparent via-blue-500/20 to-transparent" />
             </div>
           </motion.div>
         )}

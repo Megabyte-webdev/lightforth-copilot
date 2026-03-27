@@ -32,7 +32,7 @@ impl AudioManager {
     pub fn is_audio_active(&self) -> bool {
         let rms = self.current_rms.lock().unwrap_or_else(|e| e.into_inner());
         let active = *rms > 0.0005; // even more sensitive
-        println!(">>> [AUDIO] Current RMS: {}, Active? {}", *rms, active);
+                                    // println!(">>> [AUDIO] Current RMS: {}, Active? {}", *rms, active);
         active
     }
 
@@ -51,11 +51,11 @@ impl AudioManager {
         let sample_format = config_raw.sample_format();
         let config: cpal::StreamConfig = config_raw.into();
 
-        println!(">>> [AUDIO] Using: {:?}", device.description());
-        println!(
-            ">>> [AUDIO] Format: {:?} | Rate: {}",
-            sample_format, config.sample_rate
-        );
+        //println!(">>> [AUDIO] Using: {:?}", device.description());
+        // println!(
+        //     ">>> [AUDIO] Format: {:?} | Rate: {}",
+        //     sample_format, config.sample_rate
+        // );
 
         let buffer = Arc::new(Mutex::new(Vec::<f32>::new()));
         let is_running = self.is_running.clone();

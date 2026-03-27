@@ -1,5 +1,5 @@
 use reqwest::multipart;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::env;
 
 pub async fn transcribe_audio(
@@ -37,4 +37,59 @@ pub async fn transcribe_audio(
     let json: Value = res.json().await.map_err(|e| e.to_string())?;
     println!(">>> [API RESULT] {:?}", json);
     Ok(json["text"].as_str().unwrap_or("").to_string())
+}
+
+#[tauri::command]
+pub async fn ask_ai(prompt: String) -> Result<String, String> {
+    dotenvy::dotenv().ok();
+    let api_key = env::var("GROQ_API_KEY").map_err(|_| "API Key missing".to_string())?;
+
+    let client = reqwest::Client::new();
+
+    let body = json!({
+        "model": "whisper-large-v3",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are LightForth Copilot."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    });
+
+    let res = client
+        .post("https://api.groq.com/openai/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = res.status();
+    let text = res.text().await.map_err(|e| e.to_string())?;
+
+    println!(">>> STATUS: {}", status);
+    println!(">>> RAW RESPONSE: {}", text);
+
+    let json: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+
+    // 🔴 CRITICAL: handle API errors
+    if let Some(err) = json.get("error") {
+        return Err(format!("Groq API error: {}", err));
+    }
+
+    let content = json
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str());
+
+    match content {
+        Some(text) if !text.is_empty() => Ok(text.to_string()),
+        _ => Err(format!("Empty response: {}", json)),
+    }
 }
