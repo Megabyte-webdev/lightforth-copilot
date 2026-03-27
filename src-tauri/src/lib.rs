@@ -160,6 +160,16 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             match event {
+                tauri::RunEvent::ExitRequested { api, .. } => {
+                    // Prevent the process from actually killing itself
+                    api.prevent_exit();
+
+                    // Optional: Hide all windows so it feels "closed"
+                    for window in app_handle.webview_windows().values() {
+                        let _ = window.hide();
+                    }
+                }
+
                 tauri::RunEvent::WindowEvent {
                     label,
                     event: tauri::WindowEvent::CloseRequested { api, .. },
