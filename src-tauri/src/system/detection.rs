@@ -5,8 +5,13 @@ use serde::Serialize;
 use std::sync::atomic::{ AtomicBool, Ordering };
 use std::sync::{ Arc, Mutex };
 use std::time::{ Duration, Instant };
-use sysinfo::{ System, ProcessRefreshKind, RefreshKind };
+//use sysinfo::{ System, ProcessRefreshKind, RefreshKind };
 use tauri::{ AppHandle, Emitter, Manager, Runtime };
+
+#[cfg(target_os = "macos")]
+use cpal::traits::{ DeviceTrait, HostTrait, StreamTrait };
+#[cfg(target_os = "macos")]
+static MIC_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -22,34 +27,42 @@ pub enum MeetingPlatform {
 #[derive(Debug, PartialEq)]
 pub(crate) enum MeetingState {
     None,
-    Active, // Simplified state to prevent flickering
+    Active,
 }
 
 pub struct MeetingDetector<R: Runtime> {
     pub state: Arc<Mutex<MeetingState>>,
     pub last_active: Arc<Mutex<Instant>>,
-    pub current_meeting: Arc<Mutex<Option<MeetingPlatform>>>, // <--- NEW: Lock the meeting here
+    pub current_meeting: Arc<Mutex<Option<MeetingPlatform>>>,
     pub app_handle: AppHandle<R>,
     pub dismissed: AtomicBool,
-    sys: Arc<Mutex<System>>,
+    //sys: Arc<Mutex<System>>,
 }
 
 impl<R: Runtime + 'static> MeetingDetector<R> {
     pub fn new(app_handle: AppHandle<R>) -> Self {
+        #[cfg(target_os = "macos")]
+        {
+            // Start monitoring virtual audio device immediately
+            let handle_clone = app_handle.clone();
+            std::thread::spawn(move || {
+                start_virtual_device_monitoring("BlackHole 2ch", &handle_clone);
+            });
+        }
+
         Self {
             state: Arc::new(Mutex::new(MeetingState::None)),
             last_active: Arc::new(Mutex::new(Instant::now() - Duration::from_secs(10))),
-            // Initialize the new latching field as None
             current_meeting: Arc::new(Mutex::new(None)),
             app_handle,
             dismissed: AtomicBool::new(false),
-            sys: Arc::new(
-                Mutex::new(
-                    System::new_with_specifics(
-                        RefreshKind::nothing().with_processes(ProcessRefreshKind::everything())
-                    )
-                )
-            ),
+            // sys: Arc::new(
+            //     Mutex::new(
+            //         System::new_with_specifics(
+            //             RefreshKind::nothing().with_processes(ProcessRefreshKind::everything())
+            //         )
+            //     )
+            // ),
         }
     }
 
@@ -62,7 +75,11 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
                     .iter()
                     .any(|u| u.is_active)
             }
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(target_os = "macos")]
+            {
+                MIC_ACTIVE.load(Ordering::Relaxed)
+            }
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
             {
                 false
             }
@@ -72,31 +89,24 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
             return None;
         }
 
-        // 2. Parse the Window Title for URL hints
+        // 2. Parse the active window title
         if let Ok(window) = get_active_window() {
             let title = window.title.clone();
             let title_lower = title.to_lowercase();
+            let app_name = window.app_name.to_lowercase();
 
-            // Google Meet usually puts the meeting code or "Meet" in the title
             if title_lower.contains("meet.google.com") || title_lower.contains("google meet") {
                 return Some(MeetingPlatform::GoogleMeet(title));
             }
-
-            // Zoom Web Client vs App
             if title_lower.contains("zoom meeting") || title_lower.contains("zoom.us") {
                 return Some(MeetingPlatform::Zoom(title));
             }
-
-            // Microsoft Teams
             if
                 title_lower.contains("teams.microsoft.com") ||
                 title_lower.contains("microsoft teams")
             {
                 return Some(MeetingPlatform::Teams(title));
             }
-
-            // Generic Browser Fallback (captures the Tab Title)
-            let app_name = window.app_name.to_lowercase();
             if
                 app_name.contains("chrome") ||
                 app_name.contains("edge") ||
@@ -105,6 +115,7 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
                 return Some(MeetingPlatform::Browser(title));
             }
         }
+
         None
     }
 
@@ -124,18 +135,13 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
                     let mut init_needed = false;
                     let mut p_emit = None;
 
-                    // Check mic and window
                     let active_platform = detector.detect_meeting();
 
                     if let Some(detected) = active_platform {
                         *last_active = now;
-
-                        // Latch a meeting if not already latched
                         if current_meeting.is_none() {
                             *current_meeting = Some(detected.clone());
                         }
-
-                        // Trigger only if we haven't shown the widget yet
                         if
                             current_meeting.is_some() &&
                             *state == MeetingState::None &&
@@ -146,17 +152,23 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
                             p_emit = current_meeting.clone();
                         }
                     } else {
-                        // No active window, but don't close immediately if mic is on
-                        let mic_active = get_system_mic_usage()
-                            .iter()
-                            .any(|u| u.is_active);
+                        let mic_active = {
+                            #[cfg(target_os = "windows")]
+                            {
+                                get_system_mic_usage()
+                                    .iter()
+                                    .any(|u| u.is_active)
+                            }
+                            #[cfg(target_os = "macos")]
+                            {
+                                MIC_ACTIVE.load(Ordering::Relaxed)
+                            }
+                        };
 
                         if !mic_active && now.duration_since(*last_active) > cooldown {
-                            // Only reset if mic has been silent long enough
                             *state = MeetingState::None;
                             *current_meeting = None;
                             detector.dismissed.store(false, Ordering::Relaxed);
-
                             if
                                 let Some(window) =
                                     detector.app_handle.get_webview_window("meetingWidget")
@@ -165,24 +177,20 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
                             }
                         }
                     }
+
                     (init_needed, p_emit)
                 };
 
-                // Async actions outside of the Mutex locks
                 if should_init {
                     let _ = session_init(
                         detector.app_handle.clone(),
                         "meetingWidget".to_string()
                     ).await;
-
                     if let Some(window) = detector.app_handle.get_webview_window("meetingWidget") {
-                        // --- CRITICAL FIX: FORCE WINDOW VISIBILITY ---
                         let _ = window.show();
                         let _ = window.unminimize();
                         let _ = window.set_focus();
                         let _ = window.set_always_on_top(true);
-                        // ---------------------------------------------
-
                         if let Some(p) = platform_to_emit {
                             let _ = window.emit("meeting-detected", p);
                         }
@@ -192,5 +200,92 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
                 tokio::time::sleep(Duration::from_millis(1000)).await;
             }
         });
+    }
+
+    #[cfg(target_os = "macos")]
+    fn start_virtual_device_monitoring(device_name: &str, app_handle: &AppHandle) {
+        use cpal::{ SampleFormat, StreamConfig };
+        use tauri::api::dialog::message;
+
+        let host = cpal::default_host();
+
+        let device = match
+            host
+                .input_devices()
+                .unwrap()
+                .find(|d|
+                    d
+                        .name()
+                        .map(|n| n == device_name)
+                        .unwrap_or(false)
+                )
+        {
+            Some(d) => d,
+            None => {
+                // Show Tauri dialog to inform user
+                message(
+                    Some(&app_handle.get_window("main").unwrap()),
+                    "Virtual Audio Device Missing",
+                    &format!("The virtual audio device '{}' is not installed. Please download and install BlackHole (https://existential.audio/blackhole/).", device_name)
+                );
+                eprintln!("Virtual audio device '{}' not found.", device_name);
+                return;
+            }
+        };
+
+        let config: StreamConfig = match device.default_input_config() {
+            Ok(cfg) => cfg.into(),
+            Err(e) => {
+                eprintln!("Failed to get default input config: {:?}", e);
+                return;
+            }
+        };
+
+        let err_fn = |err| eprintln!("Stream error: {:?}", err);
+
+        let stream = (
+            match config.sample_format {
+                SampleFormat::F32 =>
+                    device.build_input_stream(
+                        &config,
+                        move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                            let peak = data
+                                .iter()
+                                .copied()
+                                .fold(0.0_f32, |a, b| a.max(b.abs()));
+                            MIC_ACTIVE.store(peak > 0.001, Ordering::Relaxed);
+                        },
+                        err_fn
+                    ),
+                SampleFormat::I16 =>
+                    device.build_input_stream(
+                        &config,
+                        move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                            let peak = data
+                                .iter()
+                                .copied()
+                                .map(|v| (v as f32) / (i16::MAX as f32))
+                                .fold(0.0, |a, b| a.max(b.abs()));
+                            MIC_ACTIVE.store(peak > 0.001, Ordering::Relaxed);
+                        },
+                        err_fn
+                    ),
+                SampleFormat::U16 =>
+                    device.build_input_stream(
+                        &config,
+                        move |data: &[u16], _: &cpal::InputCallbackInfo| {
+                            let peak = data
+                                .iter()
+                                .copied()
+                                .map(|v| (v as f32) / (u16::MAX as f32))
+                                .fold(0.0, |a, b| a.max(b.abs()));
+                            MIC_ACTIVE.store(peak > 0.001, Ordering::Relaxed);
+                        },
+                        err_fn
+                    ),
+            }
+        ).expect("Failed to build input stream");
+
+        stream.play().expect("Failed to play stream");
     }
 }

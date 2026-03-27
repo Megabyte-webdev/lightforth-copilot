@@ -64,7 +64,7 @@ export default function TitleBar() {
       className="fixed top-0 left-0 right-0 z-9999 flex items-center justify-between h-10 bg-black backdrop-blur-md text-white px-4 select-none group border-b border-white/5"
       data-tauri-drag-region
     >
-      <h1>LightForth Copilot</h1>
+      <h1 className="text-sm font-medium">LightForth Copilot</h1>
       <div
         className="flex items-center px-2 gap-2 opacity-100 transition-all duration-300 "
         style={{ WebkitAppRegion: "drag" } as React.CSSProperties}

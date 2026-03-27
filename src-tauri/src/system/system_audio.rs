@@ -13,10 +13,9 @@ use windows::{
     },
 };
 
-#[cfg(target_os = "windows")]
 #[derive(Debug)]
 pub struct AppAudioUsage {
-    pub process_name: String,
+    pub _process_name: String,
     pub is_active: bool,
     pub _level: f32,
 }
@@ -57,7 +56,7 @@ pub fn get_system_mic_usage() -> Vec<AppAudioUsage> {
         // We catch the returned value directly instead of passing a reference
         if let Ok(peak) = meter.GetPeakValue() {
             result.push(AppAudioUsage {
-                process_name: "SystemMic".to_string(),
+                _process_name: "SystemMic".to_string(),
                 is_active: peak > 0.001,
                 _level: peak,
             });
@@ -68,8 +67,18 @@ pub fn get_system_mic_usage() -> Vec<AppAudioUsage> {
 }
 
 #[cfg(target_os = "macos")]
-pub fn get_system_mic_usage() -> Vec<AppAudioUsage> {
-    // macOS doesn't expose mic usage per-app the same way Windows APIs do.
-    // Return an empty vec or implement Apple-specific logic here.
-    Vec::new()
+fn ensure_virtual_device_installed() {
+    if !virtual_device_available("BlackHole 2ch") {
+        // Show a dialog via Tauri or log
+        if let Some(window) = tauri::AppHandle::<tauri::Wry>::get_webview_window("main") {
+            let _ = window.emit(
+                "virtual-device-missing",
+                "Please install BlackHole (2ch) to enable meeting detection."
+            );
+        }
+
+        println!(
+            "Virtual audio device missing. Please download: https://existential.audio/blackhole/"
+        );
+    }
 }
