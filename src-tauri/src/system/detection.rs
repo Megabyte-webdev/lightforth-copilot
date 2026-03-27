@@ -174,13 +174,18 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
                         detector.app_handle.clone(),
                         "meetingWidget".to_string()
                     ).await;
-                    if
-                        let (Some(window), Some(p)) = (
-                            detector.app_handle.get_webview_window("meetingWidget"),
-                            platform_to_emit,
-                        )
-                    {
-                        let _ = window.emit("meeting-detected", p);
+
+                    if let Some(window) = detector.app_handle.get_webview_window("meetingWidget") {
+                        // --- CRITICAL FIX: FORCE WINDOW VISIBILITY ---
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
+                        let _ = window.set_always_on_top(true);
+                        // ---------------------------------------------
+
+                        if let Some(p) = platform_to_emit {
+                            let _ = window.emit("meeting-detected", p);
+                        }
                     }
                 }
 

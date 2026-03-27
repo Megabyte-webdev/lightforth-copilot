@@ -3,11 +3,13 @@ use windows::{
     Win32::{
         Media::Audio::{
             // Check if it's here:
-            Endpoints::IAudioMeterInformation, 
-            eCapture, eCommunications, IMMDeviceEnumerator, 
+            Endpoints::IAudioMeterInformation,
+            eCapture,
+            eCommunications,
+            IMMDeviceEnumerator,
             MMDeviceEnumerator,
         },
-        System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED},
+        System::Com::{ CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED },
     },
 };
 
@@ -28,13 +30,18 @@ pub fn get_system_mic_usage() -> Vec<AppAudioUsage> {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
 
         // 2. Create device enumerator
-        let enumerator: IMMDeviceEnumerator =
-            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).expect("Failed to create enumerator");
+        let enumerator: IMMDeviceEnumerator = CoCreateInstance(
+            &MMDeviceEnumerator,
+            None,
+            CLSCTX_ALL
+        ).expect("Failed to create enumerator");
 
         // 3. Get default capture device
         let device = match enumerator.GetDefaultAudioEndpoint(eCapture, eCommunications) {
             Ok(d) => d,
-            Err(_) => return result,
+            Err(_) => {
+                return result;
+            }
         };
 
         // 4. Activate IAudioMeterInformation
@@ -51,11 +58,18 @@ pub fn get_system_mic_usage() -> Vec<AppAudioUsage> {
         if let Ok(peak) = meter.GetPeakValue() {
             result.push(AppAudioUsage {
                 process_name: "SystemMic".to_string(),
-                is_active: peak > 0.001, 
+                is_active: peak > 0.001,
                 _level: peak,
             });
         }
 
         result
     }
+}
+
+#[cfg(target_os = "macos")]
+pub fn get_system_mic_usage() -> Vec<AppAudioUsage> {
+    // macOS doesn't expose mic usage per-app the same way Windows APIs do.
+    // Return an empty vec or implement Apple-specific logic here.
+    Vec::new()
 }
