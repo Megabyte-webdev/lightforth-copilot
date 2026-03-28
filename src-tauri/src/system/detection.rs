@@ -5,11 +5,11 @@ use serde::Serialize;
 use std::sync::atomic::{ AtomicBool, Ordering };
 use std::sync::{ Arc, Mutex };
 use std::time::{ Duration, Instant };
-//use sysinfo::{ System, ProcessRefreshKind, RefreshKind };
 use tauri::{ AppHandle, Emitter, Manager, Runtime };
 
 #[cfg(target_os = "macos")]
 use cpal::traits::{ DeviceTrait, HostTrait, StreamTrait };
+
 #[cfg(target_os = "macos")]
 static MIC_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -43,10 +43,10 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
     pub fn new(app_handle: AppHandle<R>) -> Self {
         #[cfg(target_os = "macos")]
         {
-            // Start monitoring virtual audio device immediately
             let handle_clone = app_handle.clone();
             std::thread::spawn(move || {
-                start_virtual_device_monitoring("BlackHole 2ch", &handle_clone);
+                // Fixed: Call as an associated function or ensure it's in scope
+                Self::start_virtual_device_monitoring("BlackHole 2ch", &handle_clone);
             });
         }
 
@@ -56,13 +56,6 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
             current_meeting: Arc::new(Mutex::new(None)),
             app_handle,
             dismissed: AtomicBool::new(false),
-            // sys: Arc::new(
-            //     Mutex::new(
-            //         System::new_with_specifics(
-            //             RefreshKind::nothing().with_processes(ProcessRefreshKind::everything())
-            //         )
-            //     )
-            // ),
         }
     }
 
@@ -203,48 +196,40 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
     }
 
     #[cfg(target_os = "macos")]
-    fn start_virtual_device_monitoring(device_name: &str, app_handle: &AppHandle) {
+    fn start_virtual_device_monitoring(device_name: &str, app_handle: &AppHandle<R>) {
         use cpal::{ SampleFormat, StreamConfig };
-        use tauri::api::dialog::message;
+        // NOTE: tauri::api::dialog is removed in V2.
+        // For now, we use eprintln. To show a UI dialog, install `tauri-plugin-dialog`.
 
         let host = cpal::default_host();
-
         let device = match
             host
                 .input_devices()
                 .unwrap()
-                .find(|d|
-                    d
-                        .name()
+                .find(|d| {
+                    d.name()
                         .map(|n| n == device_name)
                         .unwrap_or(false)
-                )
+                })
         {
             Some(d) => d,
             None => {
-                // Show Tauri dialog to inform user
-                message(
-                    Some(&app_handle.get_window("main").unwrap()),
-                    "Virtual Audio Device Missing",
-                    &format!("The virtual audio device '{}' is not installed. Please download and install BlackHole (https://existential.audio/blackhole/).", device_name)
-                );
                 eprintln!("Virtual audio device '{}' not found.", device_name);
                 return;
             }
         };
 
-        let config: StreamConfig = match device.default_input_config() {
-            Ok(cfg) => cfg.into(),
-            Err(e) => {
-                eprintln!("Failed to get default input config: {:?}", e);
-                return;
-            }
-        };
+        // Correctly get the format and config
+        let default_config = device
+            .default_input_config()
+            .expect("Failed to get default input config");
+        let sample_format = default_config.sample_format();
+        let config: StreamConfig = default_config.into();
 
         let err_fn = |err| eprintln!("Stream error: {:?}", err);
 
         let stream = (
-            match config.sample_format {
+            match sample_format {
                 SampleFormat::F32 =>
                     device.build_input_stream(
                         &config,
@@ -255,7 +240,8 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
                                 .fold(0.0_f32, |a, b| a.max(b.abs()));
                             MIC_ACTIVE.store(peak > 0.001, Ordering::Relaxed);
                         },
-                        err_fn
+                        err_fn,
+                        None // Added 4th argument (timeout)
                     ),
                 SampleFormat::I16 =>
                     device.build_input_stream(
@@ -265,27 +251,20 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
                                 .iter()
                                 .copied()
                                 .map(|v| (v as f32) / (i16::MAX as f32))
-                                .fold(0.0, |a, b| a.max(b.abs()));
+                                .fold(0.0_f32, |a, b| a.max(b.abs()));
                             MIC_ACTIVE.store(peak > 0.001, Ordering::Relaxed);
                         },
-                        err_fn
+                        err_fn,
+                        None // Added 4th argument
                     ),
-                SampleFormat::U16 =>
-                    device.build_input_stream(
-                        &config,
-                        move |data: &[u16], _: &cpal::InputCallbackInfo| {
-                            let peak = data
-                                .iter()
-                                .copied()
-                                .map(|v| (v as f32) / (u16::MAX as f32))
-                                .fold(0.0, |a, b| a.max(b.abs()));
-                            MIC_ACTIVE.store(peak > 0.001, Ordering::Relaxed);
-                        },
-                        err_fn
-                    ),
+                _ => {
+                    eprintln!("Unsupported sample format");
+                    return;
+                }
             }
         ).expect("Failed to build input stream");
 
-        stream.play().expect("Failed to play stream");
+        // Important: Keep the stream alive
+        Box::leak(Box::new(stream)).play().expect("Failed to play stream");
     }
 }
