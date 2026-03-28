@@ -1,5 +1,7 @@
 use crate::commands::session::session_init;
+#[cfg(target_os = "windows")]
 use crate::system::system_audio::get_system_mic_usage;
+
 use active_win_pos_rs::get_active_window;
 use serde::Serialize;
 use std::sync::atomic::{ AtomicBool, Ordering };
@@ -207,7 +209,7 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
                 .input_devices()
                 .unwrap()
                 .find(|d| {
-                    d.name()
+                    d.description()
                         .map(|n| n == device_name)
                         .unwrap_or(false)
                 })

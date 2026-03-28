@@ -1,3 +1,6 @@
+#[cfg(target_os = "macos")]
+use tauri::{ Manager, Emitter };
+
 #[cfg(target_os = "windows")]
 use windows::{
     Win32::{
@@ -67,10 +70,27 @@ pub fn get_system_mic_usage() -> Vec<AppAudioUsage> {
 }
 
 #[cfg(target_os = "macos")]
-fn ensure_virtual_device_installed() {
+fn virtual_device_available(name: &str) -> bool {
+    use cpal::traits::{ DeviceTrait, HostTrait };
+
+    let host = cpal::default_host();
+
+    if let Ok(devices) = host.input_devices() {
+        return devices.any(|d| {
+            d.description()
+                .map(|n| n == name)
+                .unwrap_or(false)
+        });
+    }
+
+    false
+}
+
+#[cfg(target_os = "macos")]
+fn ensure_virtual_device_installed<R: Runtime>(app_handle: &AppHandle<R>) {
     if !virtual_device_available("BlackHole 2ch") {
         // Show a dialog via Tauri or log
-        if let Some(window) = tauri::AppHandle::<tauri::Wry>::get_webview_window("main") {
+        if let Some(window) = app_handle.get_webview_window("main") {
             let _ = window.emit(
                 "virtual-device-missing",
                 "Please install BlackHole (2ch) to enable meeting detection."
