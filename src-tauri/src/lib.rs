@@ -17,7 +17,7 @@ use tauri::{
     Window,
 };
 use tauri_plugin_autostart::{ ManagerExt, MacosLauncher };
-use crate::commands::session::{ session_close, session_init };
+use crate::commands::session::{ session_close, session_init, analyze_session };
 
 #[tauri::command]
 fn start_audio(app_handle: AppHandle, audio_state: State<'_, SharedAudio>) {
@@ -153,7 +153,8 @@ pub fn run() {
                 stealth_mode,
                 trigger_test_meeting,
                 dismiss_meeting,
-                ask_ai
+                ask_ai,
+                analyze_session
             ]
         )
         .build(tauri::generate_context!())

@@ -1,10 +1,10 @@
 use reqwest::multipart;
-use serde_json::{json, Value};
+use serde_json::{ json, Value };
 use std::env;
 
 pub async fn transcribe_audio(
     audio_data: Vec<f32>,
-    original_sample_rate: u32,
+    original_sample_rate: u32
 ) -> Result<String, String> {
     dotenvy::dotenv().ok();
     let api_key = env::var("GROQ_API_KEY").map_err(|_| "API Key missing")?;
@@ -16,22 +16,19 @@ pub async fn transcribe_audio(
     let wav_bytes = crate::audio::convert_to_wav(downsampled, 16000);
 
     let client = reqwest::Client::new();
-    let form = multipart::Form::new()
+    let form = multipart::Form
+        ::new()
         .text("model", "whisper-large-v3")
         .part(
             "file",
-            multipart::Part::bytes(wav_bytes)
-                .file_name("audio.wav")
-                .mime_str("audio/wav")
-                .unwrap(),
+            multipart::Part::bytes(wav_bytes).file_name("audio.wav").mime_str("audio/wav").unwrap()
         );
 
     let res = client
         .post("https://api.groq.com/openai/v1/audio/transcriptions")
         .header("Authorization", format!("Bearer {}", api_key))
         .multipart(form)
-        .send()
-        .await
+        .send().await
         .map_err(|e| e.to_string())?;
 
     let json: Value = res.json().await.map_err(|e| e.to_string())?;
@@ -46,7 +43,8 @@ pub async fn ask_ai(prompt: String) -> Result<String, String> {
 
     let client = reqwest::Client::new();
 
-    let body = json!({
+    let body =
+        json!({
         "model": "whisper-large-v3",
         "messages": [
             {
@@ -61,11 +59,10 @@ pub async fn ask_ai(prompt: String) -> Result<String, String> {
     });
 
     let res = client
-        .post("https://api.groq.com/openai/v1/chat/completions")
+        .post("http://localhost:3000/api/se")
         .header("Authorization", format!("Bearer {}", api_key))
         .json(&body)
-        .send()
-        .await
+        .send().await
         .map_err(|e| e.to_string())?;
 
     let status = res.status();

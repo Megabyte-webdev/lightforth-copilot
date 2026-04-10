@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import SessionControl from "../components/SessionControl";
 
 export default function Overview() {
   return (
@@ -8,12 +8,7 @@ export default function Overview() {
           <h1 className="text-3xl font-bold text-white">Dashboard</h1>
           <p className="text-slate-400">Welcome back to your command center.</p>
         </div>
-        <button
-          onClick={() => invoke("start_session")}
-          className="bg-blue-600 px-6 py-2 rounded-lg hover:bg-blue-500 font-semibold shadow-lg shadow-blue-900/20 transition-colors"
-        >
-          Start New Session
-        </button>
+        <SessionControl />
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

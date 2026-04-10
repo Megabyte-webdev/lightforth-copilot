@@ -26,7 +26,7 @@ export default function Widget() {
       await appWindow.setSize(new LogicalSize(500, 120));
       state.isExpanded = false;
     } else {
-      await appWindow.setSize(new LogicalSize(500, 300)); // Increased height for response room
+      await appWindow.setSize(new LogicalSize(500, 500)); // Increased height for response room
       state.isExpanded = true;
     }
   };
@@ -37,11 +37,13 @@ export default function Widget() {
     state.aiStatus = "processing";
     const userQuery = input;
     setInput("");
+    console.log(snap);
 
     try {
       // Call your new Rust command
-      const response = await invoke("kalosm_ask_ai", {
-        prompt: userQuery,
+      const response = await invoke("analyze_session", {
+        sessionId: snap.sessionId,
+        transcript: userQuery,
       });
 
       state.aiResponse = response as string;

@@ -1,9 +1,9 @@
 use super::super::audio::capture::SharedAudio;
-use tauri::{AppHandle, Manager, Runtime, State};
-
+use tauri::{ AppHandle, Manager, Runtime, State };
+use serde_json::json;
 pub async fn session_init<R: Runtime>(
     app: AppHandle<R>,
-    target_label: impl Into<Option<String>>, // Optional: "widget" or "meeting-widget"
+    target_label: impl Into<Option<String>> // Optional: "widget" or "meeting-widget"
 ) {
     // Convert the input into an Option<String>
     let target_label: Option<String> = target_label.into();
@@ -42,4 +42,31 @@ pub async fn session_close(app: AppHandle, audio_state: State<'_, SharedAudio>) 
         let _ = main.show();
         let _ = main.set_focus();
     }
+}
+
+#[tauri::command]
+pub async fn analyze_session(session_id: String, transcript: String) -> Result<String, String> {
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(&format!("http://localhost:3000/api/sessions/{}/analyze", session_id))
+        .json(&json!({ "transcript": transcript }))
+        .send().await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    let status = res.status(); // <-- take status first
+    if !status.is_success() {
+        let txt = res.text().await.unwrap_or_default(); // moves `res`
+        return Err(format!("Backend error {}: {}", status, txt));
+    }
+
+    // Now we can still use `res` because we only moved it in the error branch
+    let body: serde_json::Value = res.json().await.map_err(|e| format!("Invalid JSON: {}", e))?;
+
+    let insight = body["insight"]
+        .as_str()
+        .ok_or_else(|| "No insight returned".to_string())?
+        .to_string();
+
+    Ok(insight)
 }
