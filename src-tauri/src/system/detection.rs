@@ -210,7 +210,7 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
                 .unwrap()
                 .find(|d| {
                     d.description()
-                        .map(|n| n == device_name)
+                        .map(|desc| desc.name == device_name)
                         .unwrap_or(false)
                 })
         {
