@@ -1,5 +1,5 @@
 #[cfg(target_os = "macos")]
-use tauri::{ Manager, Emitter };
+use tauri::{ Manager, Emitter, Runtime, AppHandle };
 
 #[cfg(target_os = "windows")]
 use windows::{
