@@ -70,14 +70,15 @@ pub fn get_system_mic_usage() -> Vec<AppAudioUsage> {
 }
 
 #[cfg(target_os = "macos")]
-#[cfg(target_os = "macos")]
 fn virtual_device_available(name: &str) -> bool {
     use cpal::traits::{ DeviceTrait, HostTrait };
 
     let host = cpal::default_host();
 
     if let Ok(devices) = host.input_devices() {
-        return devices.any(|d| { d.description().unwrap_or_default() == name });
+        return devices.any(|d| {
+            if let Ok(desc) = d.description() { desc.name == name } else { false }
+        });
     }
 
     false
