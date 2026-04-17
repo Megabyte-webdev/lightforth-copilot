@@ -198,7 +198,7 @@ impl<R: Runtime + 'static> MeetingDetector<R> {
     }
 
     #[cfg(target_os = "macos")]
-    fn start_virtual_device_monitoring(device_name: &str, app_handle: &AppHandle<R>) {
+    fn start_virtual_device_monitoring(device_name: &str, _app_handle: &AppHandle<R>) {
         use cpal::{ SampleFormat, StreamConfig };
         // NOTE: tauri::api::dialog is removed in V2.
         // For now, we use eprintln. To show a UI dialog, install `tauri-plugin-dialog`.
