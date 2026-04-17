@@ -70,23 +70,15 @@ pub fn get_system_mic_usage() -> Vec<AppAudioUsage> {
 }
 
 #[cfg(target_os = "macos")]
+#[cfg(target_os = "macos")]
 fn virtual_device_available(name: &str) -> bool {
     use cpal::traits::{ DeviceTrait, HostTrait };
 
     let host = cpal::default_host();
 
-    let device = match
-        host
-            .input_devices()
-            .unwrap()
-            .find(|d| d.name() == device_name)
-    {
-        Some(d) => d,
-        None => {
-            eprintln!("Virtual audio device '{}' not found.", device_name);
-            return;
-        }
-    };
+    if let Ok(devices) = host.input_devices() {
+        return devices.any(|d| { d.description().unwrap_or_default() == name });
+    }
 
     false
 }
