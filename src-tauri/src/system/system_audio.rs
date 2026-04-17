@@ -75,13 +75,18 @@ fn virtual_device_available(name: &str) -> bool {
 
     let host = cpal::default_host();
 
-    if let Ok(devices) = host.input_devices() {
-        return devices.any(|d| {
-            d.description()
-                .map(|n| n == name)
-                .unwrap_or(false)
-        });
-    }
+    let device = match
+        host
+            .input_devices()
+            .unwrap()
+            .find(|d| d.name() == device_name)
+    {
+        Some(d) => d,
+        None => {
+            eprintln!("Virtual audio device '{}' not found.", device_name);
+            return;
+        }
+    };
 
     false
 }
